@@ -24,6 +24,7 @@ import io.plaidapp.core.data.Result
 import io.plaidapp.core.dribbble.data.ShotsRepository
 import io.plaidapp.core.dribbble.data.api.model.Shot
 import io.plaidapp.core.util.event.Event
+import io.plaidapp.dribbble.domain.CreateShotUiModelUseCase
 import io.plaidapp.dribbble.domain.GetShareShotInfoUseCase
 import io.plaidapp.dribbble.domain.ShareShotInfo
 import io.plaidapp.dribbble.testShot
@@ -46,16 +47,19 @@ class ShotViewModelTest {
 
     private val shotId = 1337L
     private val repo: ShotsRepository = mock()
-    private val getShareShotInfoUseCase: GetShareShotInfoUseCase = mock()
+    private val createShotUiModel: CreateShotUiModelUseCase = mock()
+    private val getShareShotInfo: GetShareShotInfoUseCase = mock()
+    private val shotStyler: ShotStyler = mock()
 
     @Test
-    fun loadShot_existsInRepo() {
+    fun loadShot_existsInRepo() = runBlocking {
         // Given that the repo successfully returns the requested shot
         // When view model is constructed
         val viewModel = withViewModel()
+        val uiModel = LiveDataTestUtil.getValue(viewModel.getShotUiModel(shotStyler))
 
-        // Then the shot is present
-        assertNotNull(viewModel.shot)
+        // Then the UI Model is emitted
+        assertNotNull(uiModel)
     }
 
     @Test(expected = IllegalStateException::class)
@@ -67,7 +71,8 @@ class ShotViewModelTest {
         ShotViewModel(
             shotId,
             repo,
-            getShareShotInfoUseCase,
+            createShotUiModel,
+            getShareShotInfo,
             provideFakeCoroutinesContextProvider()
         )
         // Then it throws
@@ -103,6 +108,32 @@ class ShotViewModelTest {
         assertEquals(expected, shareInfoEvent!!.peek())
     }
 
+    @Test
+    fun getAssistWebUrl_returnsShotUrl() {
+        // Given a view model with a shot with a known URL
+        val url = "https://dribbble.com/shots/2344334-Plaid-Product-Icon"
+        val viewModel = withViewModel(shot = testShot.copy(htmlUrl = url))
+
+        // When there is a request to share the shot
+        val assistWebUrl = viewModel.getAssistWebUrl()
+
+        // Then the expected URL is returned
+        assertEquals(url, assistWebUrl)
+    }
+
+    @Test
+    fun getShotId_returnsId() {
+        // Given a view model with a shot with a known ID
+        val id = 1234L
+        val viewModel = withViewModel(shot = testShot.copy(id = id))
+
+        // When there is a request to share the shot
+        val shotId = viewModel.getShotId()
+
+        // Then the expected ID is returned
+        assertEquals(id, shotId)
+    }
+
     private fun withViewModel(
         shot: Shot = testShot,
         shareInfo: ShareShotInfo? = null
@@ -110,13 +141,14 @@ class ShotViewModelTest {
         whenever(repo.getShot(shotId)).thenReturn(Result.Success(shot))
         if (shareInfo != null) {
             runBlocking {
-                whenever(getShareShotInfoUseCase(any())).thenReturn(shareInfo)
+                whenever(getShareShotInfo(any())).thenReturn(shareInfo)
             }
         }
         return ShotViewModel(
             shotId,
             repo,
-            getShareShotInfoUseCase,
+            createShotUiModel,
+            getShareShotInfo,
             provideFakeCoroutinesContextProvider()
         )
     }
